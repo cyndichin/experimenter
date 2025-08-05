@@ -2210,11 +2210,18 @@ class TestLaunchViews(AuthTestCase):
         )
         self.assertTrue(self.experiment.is_paused)
 
-    def test_live_to_complete_view(self):
+    @parameterized.expand(
+        [
+            (False,),
+            (True,),
+        ]
+    )
+    def test_live_to_complete_view(self, is_rollout):
         self.experiment.status = NimbusExperiment.Status.LIVE
         self.experiment.status_next = None
         self.experiment.publish_status = NimbusExperiment.PublishStatus.IDLE
         self.experiment.is_paused = False
+        self.experiment.is_rollout = is_rollout
         self.experiment.save()
 
         response = self.client.post(
@@ -2227,7 +2234,6 @@ class TestLaunchViews(AuthTestCase):
         self.assertEqual(
             self.experiment.publish_status, NimbusExperiment.PublishStatus.REVIEW
         )
-        self.assertTrue(self.experiment.is_paused)
 
     def test_approve_end_enrollment_view(self):
         self.experiment.status = NimbusExperiment.Status.LIVE
@@ -2250,11 +2256,18 @@ class TestLaunchViews(AuthTestCase):
         )
         self.assertTrue(self.experiment.is_paused)
 
-    def test_approve_end_experiment_view(self):
+    @parameterized.expand(
+        [
+            (False,),
+            (True,),
+        ]
+    )
+    def test_approve_end_experiment_view(self, is_rollout):
         self.experiment.status = NimbusExperiment.Status.LIVE
         self.experiment.status_next = NimbusExperiment.Status.COMPLETE
         self.experiment.publish_status = NimbusExperiment.PublishStatus.REVIEW
         self.experiment.is_paused = True
+        self.experiment.is_rollout = is_rollout
         self.experiment.save()
 
         response = self.client.post(
@@ -2334,11 +2347,18 @@ class TestLaunchViews(AuthTestCase):
         self.assertEqual(changelog.changed_by, self.user)
         self.assertIn("Cancelled end enrollment request.", changelog.message)
 
-    def test_reject_end_experiment_view(self):
+    @parameterized.expand(
+        [
+            (False,),
+            (True,),
+        ]
+    )
+    def test_reject_end_experiment_view(self, is_rollout):
         self.experiment.status = NimbusExperiment.Status.LIVE
         self.experiment.status_next = NimbusExperiment.Status.COMPLETE
         self.experiment.publish_status = NimbusExperiment.PublishStatus.REVIEW
         self.experiment.is_paused = True
+        self.experiment.is_rollout = is_rollout
         self.experiment.save()
 
         response = self.client.post(
@@ -2367,11 +2387,18 @@ class TestLaunchViews(AuthTestCase):
             changelog.message,
         )
 
-    def test_cancel_end_experiment_view(self):
+    @parameterized.expand(
+        [
+            (False,),
+            (True,),
+        ]
+    )
+    def test_cancel_end_experiment_view(self, is_rollout):
         self.experiment.status = NimbusExperiment.Status.LIVE
         self.experiment.status_next = NimbusExperiment.Status.COMPLETE
         self.experiment.publish_status = NimbusExperiment.PublishStatus.REVIEW
         self.experiment.is_paused = True
+        self.experiment.is_rollout = is_rollout
         self.experiment.save()
 
         response = self.client.post(
@@ -2396,108 +2423,6 @@ class TestLaunchViews(AuthTestCase):
         changelog = self.experiment.changes.latest("changed_on")
         self.assertEqual(changelog.changed_by, self.user)
         self.assertIn("Cancelled end experiment request.", changelog.message)
-
-    def test_live_to_complete_rollout_view(self):
-        self.experiment.status = NimbusExperiment.Status.LIVE
-        self.experiment.status_next = None
-        self.experiment.publish_status = NimbusExperiment.PublishStatus.IDLE
-        self.experiment.is_paused = False
-        self.experiment.is_rollout = True
-        self.experiment.save()
-
-        response = self.client.post(
-            reverse(
-                "nimbus-ui-live-to-complete-rollout",
-                kwargs={"slug": self.experiment.slug},
-            )
-        )
-        self.assertEqual(response.status_code, 200)
-        self.experiment.refresh_from_db()
-        self.assertEqual(self.experiment.status_next, NimbusExperiment.Status.COMPLETE)
-        self.assertEqual(
-            self.experiment.publish_status, NimbusExperiment.PublishStatus.REVIEW
-        )
-        self.assertTrue(self.experiment.is_paused)
-
-    def test_cancel_end_rollout_view_with_rejection(self):
-        self.experiment.status = NimbusExperiment.Status.LIVE
-        self.experiment.status_next = NimbusExperiment.Status.COMPLETE
-        self.experiment.publish_status = NimbusExperiment.PublishStatus.REVIEW
-        self.experiment.is_paused = True
-        self.experiment.is_rollout = True
-        self.experiment.save()
-
-        response = self.client.post(
-            reverse(
-                "nimbus-ui-cancel-end-rollout", kwargs={"slug": self.experiment.slug}
-            ),
-            data={
-                "changelog_message": "Rollout not complete yet.",
-                "action_type": "end_rollout",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        self.experiment.refresh_from_db()
-        self.assertEqual(self.experiment.status_next, None)
-        self.assertEqual(
-            self.experiment.publish_status, NimbusExperiment.PublishStatus.IDLE
-        )
-
-        changelog = self.experiment.changes.latest("changed_on")
-        self.assertIn("Rollout not complete yet.", changelog.message)
-
-    def test_cancel_end_rollout_view_with_cancel_message(self):
-        self.experiment.status = NimbusExperiment.Status.LIVE
-        self.experiment.status_next = NimbusExperiment.Status.COMPLETE
-        self.experiment.publish_status = NimbusExperiment.PublishStatus.REVIEW
-        self.experiment.is_paused = True
-        self.experiment.is_rollout = True
-        self.experiment.save()
-
-        response = self.client.post(
-            reverse(
-                "nimbus-ui-cancel-end-rollout", kwargs={"slug": self.experiment.slug}
-            ),
-            data={
-                "cancel_message": "Cancelled end rollout.",
-                "action_type": "end_rollout",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        self.experiment.refresh_from_db()
-        self.assertEqual(self.experiment.status_next, None)
-        self.assertEqual(
-            self.experiment.publish_status, NimbusExperiment.PublishStatus.IDLE
-        )
-
-        changelog = self.experiment.changes.latest("changed_on")
-        self.assertIn("Cancelled end rollout.", changelog.message)
-
-    def test_approve_end_rollout_view(self):
-        self.experiment.status = NimbusExperiment.Status.LIVE
-        self.experiment.status_next = NimbusExperiment.Status.COMPLETE
-        self.experiment.publish_status = NimbusExperiment.PublishStatus.REVIEW
-        self.experiment.is_paused = True
-        self.experiment.is_rollout = True
-        self.experiment.save()
-
-        response = self.client.post(
-            reverse(
-                "nimbus-ui-approve-end-rollout", kwargs={"slug": self.experiment.slug}
-            )
-        )
-        self.assertEqual(response.status_code, 200)
-        self.experiment.refresh_from_db()
-        self.assertEqual(self.experiment.status_next, NimbusExperiment.Status.COMPLETE)
-        self.assertEqual(
-            self.experiment.publish_status, NimbusExperiment.PublishStatus.APPROVED
-        )
-
-        changelog = self.experiment.changes.latest("changed_on")
-        self.assertIn("approved the end rollout request", changelog.message)
-        self.mock_push_task.assert_called_once_with(
-            countdown=5, args=[self.experiment.kinto_collection]
-        )
 
     def test_live_to_update_rollout_view(self):
         self.experiment.status = NimbusExperiment.Status.LIVE
@@ -2979,22 +2904,153 @@ class TestBranchScreenshotDeleteView(AuthTestCase):
 
 
 class TestNimbusExperimentsHomeView(AuthTestCase):
-    def test_home_view_shows_only_owned_experiments(self):
-        my_experiment = NimbusExperimentFactory.create(owner=self.user, slug="mine")
-        NimbusExperimentFactory.create(slug="not-mine")
+    def test_home_view_shows_owned_and_subscribed_experiments(self):
+        # Owned by current user
+        owned_exp = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.CREATED, owner=self.user, slug="owned-exp"
+        )
+
+        # Subscribed experiment
+        other_user = UserFactory.create()
+        subscribed_exp = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.PREVIEW,
+            owner=other_user,
+            slug="subscribed-exp",
+        )
+        subscribed_exp.subscribers.add(self.user)
+
+        # Irrelevant
+        unrelated_exp = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.LIVE_ENROLLING, slug="unrelated-exp"
+        )
 
         response = self.client.get(reverse("nimbus-ui-home"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            list(response.context["experiments"]),
-            [my_experiment],
+
+        experiments = list(response.context["experiments"])
+
+        self.assertIn(owned_exp, experiments)
+        self.assertIn(subscribed_exp, experiments)
+        self.assertNotIn(unrelated_exp, experiments)
+
+        draft_or_preview_page = response.context["draft_or_preview_page"].object_list
+        self.assertIn(owned_exp, draft_or_preview_page)
+        self.assertIn(subscribed_exp, draft_or_preview_page)
+
+    def test_home_view_filter_archived_experiments(self):
+        non_archived_exp = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.CREATED, owner=self.user, slug="owned-exp"
         )
+        archived_exp = NimbusExperimentFactory.create(is_archived=True, owner=self.user)
+        response = self.client.get(reverse("nimbus-ui-home"))
+        self.assertEqual(response.status_code, 200)
+
+        experiments = list(response.context["experiments"])
+        self.assertIn(non_archived_exp, experiments)
+        self.assertNotIn(archived_exp, experiments)
 
     def test_home_view_renders_template(self):
-        NimbusExperimentFactory.create(owner=self.user)
+        NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.CREATED, owner=self.user
+        )
         response = self.client.get(reverse("nimbus-ui-home"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "nimbus_experiments/home.html")
+
+    def test_draft_or_preview_context_pagination(self):
+        draft = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.CREATED, owner=self.user
+        )
+        preview = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.PREVIEW, owner=self.user
+        )
+        live = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.LIVE_ENROLLING, owner=self.user
+        )
+
+        response = self.client.get(reverse("nimbus-ui-home"))
+        self.assertEqual(response.status_code, 200)
+        draft_preview_page = response.context["draft_or_preview_page"].object_list
+        self.assertIn(draft, draft_preview_page)
+        self.assertIn(preview, draft_preview_page)
+        self.assertNotIn(live, draft_preview_page)
+
+    def test_draft_or_preview_pagination_respects_page_size(self):
+        for _ in range(7):
+            NimbusExperimentFactory.create_with_lifecycle(
+                NimbusExperimentFactory.Lifecycles.CREATED, owner=self.user
+            )
+
+        response = self.client.get(reverse("nimbus-ui-home") + "?draft_page=1")
+        page = response.context["draft_or_preview_page"]
+        self.assertEqual(page.number, 1)
+        self.assertEqual(page.paginator.per_page, 5)
+        self.assertEqual(len(page.object_list), 5)
+
+        response = self.client.get(reverse("nimbus-ui-home") + "?draft_page=2")
+        page2 = response.context["draft_or_preview_page"]
+        self.assertEqual(page2.number, 2)
+        self.assertEqual(len(page2.object_list), 2)
+
+    def test_ready_for_attention_context_pagination(self):
+        in_review = NimbusExperimentFactory.create(
+            owner=self.user,
+            status=NimbusExperiment.Status.DRAFT,
+            publish_status=NimbusExperiment.PublishStatus.REVIEW,
+            slug="review-exp",
+        )
+        missing_takeaways = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.ENDING_APPROVE_APPROVE,
+            owner=self.user,
+            slug="missing-takeaways-exp",
+            conclusion_recommendations=[],
+            takeaways_summary="",
+        )
+        should_end_enrollment = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.LIVE_ENROLLING,
+            owner=self.user,
+            proposed_enrollment=1,
+            start_date=datetime.date.today() - datetime.timedelta(days=2),
+            slug="end-enrollment-exp",
+        )
+        overdue_end = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.LAUNCH_APPROVE_APPROVE,
+            owner=self.user,
+            proposed_duration=10,
+            start_date=datetime.date.today() - datetime.timedelta(days=10),
+            slug="overdue-exp",
+        )
+        complete_exp = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.ENDING_APPROVE_APPROVE,
+            owner=self.user,
+            slug="complete-exp",
+            status=NimbusExperiment.Status.COMPLETE,
+            conclusion_recommendations=["RERUN", "STOP"],
+            takeaways_summary="",
+        )
+        complete_exp2 = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.ENDING_APPROVE_APPROVE,
+            owner=self.user,
+            slug="complete-exp2",
+            status=NimbusExperiment.Status.COMPLETE,
+            takeaways_summary="takeaway",
+        )
+        draft_exp = NimbusExperimentFactory.create_with_lifecycle(
+            NimbusExperimentFactory.Lifecycles.CREATED, owner=self.user, slug="draft-exp"
+        )
+
+        response = self.client.get(reverse("nimbus-ui-home"))
+        self.assertEqual(response.status_code, 200)
+
+        attention_page = response.context["ready_for_attention_page"].object_list
+
+        self.assertIn(in_review, attention_page)
+        self.assertIn(missing_takeaways, attention_page)
+        self.assertIn(should_end_enrollment, attention_page)
+        self.assertIn(overdue_end, attention_page)
+        self.assertNotIn(complete_exp, attention_page)
+        self.assertNotIn(complete_exp2, attention_page)
+        self.assertNotIn(draft_exp, attention_page)
 
 
 class TestSlugRedirectToSummary(AuthTestCase):

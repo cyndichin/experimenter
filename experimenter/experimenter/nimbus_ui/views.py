@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.views.generic import CreateView, DetailView
@@ -19,21 +21,18 @@ from experimenter.nimbus_ui.filtersets import (
 from experimenter.nimbus_ui.forms import (
     ApproveEndEnrollmentForm,
     ApproveEndExperimentForm,
-    ApproveEndRolloutForm,
     ApproveUpdateRolloutForm,
     AudienceForm,
     BranchScreenshotCreateForm,
     BranchScreenshotDeleteForm,
     CancelEndEnrollmentForm,
     CancelEndExperimentForm,
-    CancelEndRolloutForm,
     CancelUpdateRolloutForm,
     DocumentationLinkCreateForm,
     DocumentationLinkDeleteForm,
     DraftToPreviewForm,
     DraftToReviewForm,
     LiveToCompleteForm,
-    LiveToCompleteRolloutForm,
     LiveToEndEnrollmentForm,
     LiveToUpdateRolloutForm,
     MetricsForm,
@@ -606,18 +605,6 @@ class CancelEndExperimentView(StatusUpdateView):
     form_class = CancelEndExperimentForm
 
 
-class LiveToCompleteRolloutView(StatusUpdateView):
-    form_class = LiveToCompleteRolloutForm
-
-
-class CancelEndRolloutView(StatusUpdateView):
-    form_class = CancelEndRolloutForm
-
-
-class ApproveEndRolloutView(StatusUpdateView):
-    form_class = ApproveEndRolloutForm
-
-
 class LiveToUpdateRolloutView(StatusUpdateView):
     form_class = LiveToUpdateRolloutForm
 
@@ -640,6 +627,32 @@ class NimbusExperimentsHomeView(FilterView):
     context_object_name = "experiments"
 
     def get_queryset(self):
-        return NimbusExperiment.objects.filter(owner=self.request.user).order_by(
-            "-_updated_date_time"
+        return (
+            NimbusExperiment.objects.filter(is_archived=False)
+            .filter(Q(owner=self.request.user) | Q(subscribers=self.request.user))
+            .distinct()
+            .order_by("-_updated_date_time")
+            .prefetch_related("subscribers")
         )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        all_experiments = list(context["experiments"])
+
+        draft_or_preview_experiments = [
+            exp for exp in all_experiments if exp.is_draft or exp.is_preview
+        ]
+        ready_for_attention_experiments = [
+            exp for exp in all_experiments if exp.is_ready_for_attention
+        ]
+        draft_page = self.request.GET.get("draft_page", 1)
+        attention_page = self.request.GET.get("attention_page", 1)
+        context["draft_or_preview_page"] = Paginator(
+            draft_or_preview_experiments, 5
+        ).get_page(draft_page)
+        context["ready_for_attention_page"] = Paginator(
+            ready_for_attention_experiments, 5
+        ).get_page(attention_page)
+        context["links"] = NimbusUIConstants.HOME_PAGE_LINKS
+        context["tooltips"] = NimbusUIConstants.HOME_PAGE_TOOLTIPS
+        return context

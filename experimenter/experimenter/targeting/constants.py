@@ -2349,17 +2349,6 @@ IOS_REVIEW_CHECKER_ENABLED_USERS_ONLY = NimbusTargetingConfig(
     application_choice_names=(Application.IOS.name,),
 )
 
-ANDROID_REVIEW_CHECKER_ENABLED_USERS_ONLY = NimbusTargetingConfig(
-    name="Review checker enabled users only",
-    slug="android_review_checker_enabled_users_only",
-    description="Targeting users who have opted in review checker",
-    targeting="is_review_checker_enabled",
-    desktop_telemetry="",
-    sticky_required=False,
-    is_first_run_required=False,
-    application_choice_names=(Application.FENIX.name,),
-)
-
 ANDROID_DMA_USERS_ONLY = NimbusTargetingConfig(
     name="DMA users only",
     slug="android_dma_users_only",
@@ -2377,6 +2366,28 @@ ANDROID_LARGE_SCREEN_USERS_ONLY = NimbusTargetingConfig(
     slug="large_screen_device_users_only",
     description="Targeting users who have large screen devices",
     targeting="is_large_device",
+    desktop_telemetry="",
+    sticky_required=False,
+    is_first_run_required=False,
+    application_choice_names=(Application.FENIX.name,),
+)
+
+TOU_TARGETING_ANDROID_NOT_ACCEPTED = NimbusTargetingConfig(
+    name="Users that have not accepted the Terms of Use",
+    slug="users_not_accepted_tou",
+    description="Targeting users who have NOT accepted the Terms of Use",
+    targeting="user_accepted_tou == false",
+    desktop_telemetry="",
+    sticky_required=False,
+    is_first_run_required=False,
+    application_choice_names=(Application.FENIX.name,),
+)
+
+TOU_TARGETING_ANDROID_ACCEPTED = NimbusTargetingConfig(
+    name="Users that have accepted the Terms of Use",
+    slug="users_accepted_tou",
+    description="Targeting users who have accepted the Terms of Use",
+    targeting="user_accepted_tou == true",
     desktop_telemetry="",
     sticky_required=False,
     is_first_run_required=False,

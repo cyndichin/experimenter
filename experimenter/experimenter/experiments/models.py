@@ -317,16 +317,18 @@ class NimbusExperiment(NimbusConstants, TargetingConstants, FilterMixin, models.
         "Takeaways QBR Learning", default=False, blank=False, null=False
     )
     takeaways_summary = models.TextField("Takeaways Summary", blank=True, null=True)
-    _updated_date_time = models.DateTimeField(auto_now=True)
     is_first_run = models.BooleanField("Is First Run Flag", default=False)
     is_client_schema_disabled = models.BooleanField(
         "Is Client Schema Disabled Flag", default=False
     )
 
+    # Cached dates
+    _updated_date_time = models.DateTimeField(auto_now=True)
     _start_date = models.DateField("Start Date", blank=True, null=True)
     _enrollment_end_date = models.DateField("Enrollment End Date", blank=True, null=True)
     _computed_end_date = models.DateField("Computed End Date", blank=True, null=True)
     _end_date = models.DateField("End Date", blank=True, null=True)
+
     prevent_pref_conflicts = models.BooleanField(
         "Prevent Preference Conflicts Flag", blank=True, null=True, default=False
     )
@@ -713,7 +715,7 @@ class NimbusExperiment(NimbusConstants, TargetingConstants, FilterMixin, models.
 
     @property
     def is_observation(self):
-        return self._enrollment_end_date is not None and not self.is_complete
+        return self.status == self.Status.LIVE and self.is_paused_published
 
     @property
     def is_started(self):
@@ -798,16 +800,6 @@ class NimbusExperiment(NimbusConstants, TargetingConstants, FilterMixin, models.
         return (
             self.status == self.Status.LIVE
             and self.publish_status != self.PublishStatus.REVIEW
-            and not self.should_end
-            and not self.is_rollout
-        )
-
-    @property
-    def should_show_end_rollout(self):
-        return (
-            self.status == self.Status.LIVE
-            and self.publish_status != self.PublishStatus.REVIEW
-            and self.is_rollout
         )
 
     @property
@@ -825,9 +817,11 @@ class NimbusExperiment(NimbusConstants, TargetingConstants, FilterMixin, models.
     @property
     def is_rollout_update_requested(self):
         return (
-            self.is_enrolling
-            and self.is_rollout_dirty
+            self.status == self.Status.LIVE
+            and self.status_next == self.Status.LIVE
             and self.publish_status == self.PublishStatus.REVIEW
+            and self.is_rollout
+            and self.is_rollout_dirty
         )
 
     @property
@@ -985,7 +979,8 @@ class NimbusExperiment(NimbusConstants, TargetingConstants, FilterMixin, models.
             return None
 
         if self._computed_end_date:
-            return self._computed_end_date
+            if self.start_date is not None and self._computed_end_date >= self.start_date:
+                return self._computed_end_date
 
         end_date = self._get_computed_end_date()
         self.update_computed_end_date(end_date)
@@ -1040,6 +1035,14 @@ class NimbusExperiment(NimbusConstants, TargetingConstants, FilterMixin, models.
     @property
     def is_live_rollout(self):
         return self.is_rollout and self.is_enrolling
+
+    @property
+    def is_missing_takeaway_info(self):
+        return (
+            self.is_complete
+            and not (self.takeaways_summary and self.takeaways_summary.strip())
+            and not self.conclusion_recommendations
+        )
 
     def can_edit_overview(self):
         return self.is_draft
@@ -1168,6 +1171,14 @@ class NimbusExperiment(NimbusConstants, TargetingConstants, FilterMixin, models.
     def should_end_enrollment(self):
         if self.proposed_enrollment_end_date:
             return datetime.date.today() >= self.proposed_enrollment_end_date
+
+    @property
+    def is_ready_for_attention(self):
+        return (
+            self.is_review
+            or self.is_missing_takeaway_info
+            or (not self.is_complete and (self.should_end_enrollment or self.should_end))
+        )
 
     @property
     def is_paused_published(self):
@@ -1666,6 +1677,7 @@ class NimbusExperiment(NimbusConstants, TargetingConstants, FilterMixin, models.
         cloned._start_date = None
         cloned._end_date = None
         cloned._enrollment_end_date = None
+        cloned._computed_end_date = None
         cloned.qa_status = NimbusExperiment.QAStatus.NOT_SET
         cloned.qa_comment = None
         cloned.klaatu_status = False
